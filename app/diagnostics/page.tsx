@@ -165,6 +165,17 @@ export default function DiagnosticsPage() {
                           </span>
                         </div>
                       </div>
+                      
+                      {/* Model */}
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2 text-slate-500">
+                          <Target className="h-4 w-4" />
+                          <span className="text-xs font-semibold uppercase tracking-wider">AI Model</span>
+                        </div>
+                        <span className="text-sm font-mono font-bold text-slate-800">
+                          {capture.model || 'YOLOv8'}
+                        </span>
+                      </div>
                     </div>
 
                   </div>

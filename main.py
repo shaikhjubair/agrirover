@@ -67,7 +67,7 @@ def camera_thread():
         with frame_lock:
             raw_frame = frame.copy()
 
-def add_log(type_str, target_name, timestamp_str, image_url, conf, uptime, hum, temp):
+def add_log(type_str, target_name, timestamp_str, image_url, conf, uptime, hum, temp, model_name="YOLOv8"):
     log_entry = {
         "id": str(uuid.uuid4()),
         "type": type_str,
@@ -78,7 +78,8 @@ def add_log(type_str, target_name, timestamp_str, image_url, conf, uptime, hum, 
         "motorUptimeSecs": uptime,
         "humidity": hum,
         "temperature": temp,
-        "distance": round(uptime * 0.5, 1)
+        "distance": round(uptime * 0.5, 1),
+        "model": model_name
     }
     with logs_lock:
         event_logs.insert(0, log_entry)
@@ -127,7 +128,7 @@ def run_inference_on_frame(frame):
         cv2.imwrite(CAPTURE_FILE, annotated_frame)
         
         image_url = f"http://127.0.0.1:5000/static/logs/security/{filename}"
-        add_log("Security", sec_threat.capitalize(), timestamp_str, image_url, sec_conf, hw_uptime, hw_hum, hw_temp)
+        add_log("Security", sec_threat.capitalize(), timestamp_str, image_url, sec_conf, hw_uptime, hw_hum, hw_temp, "yolov8n.pt")
         update_global_status("Security", "Intruder Alert", sec_threat.capitalize(), sec_conf, "rose")
         return
 
@@ -150,7 +151,7 @@ def run_inference_on_frame(frame):
             cv2.imwrite(filepath, plot_img)
             cv2.imwrite(CAPTURE_FILE, plot_img) # Update latest capture
             image_url = f"http://127.0.0.1:5000/static/logs/health/{filename}"
-            add_log("Disease", cls_name, timestamp_str, image_url, conf, hw_uptime, hw_hum, hw_temp)
+            add_log("Disease", cls_name, timestamp_str, image_url, conf, hw_uptime, hw_hum, hw_temp, "best.pt")
             update_global_status("Health", "Action Required", cls_name, conf, "amber")
             any_detected = True
 
@@ -166,7 +167,7 @@ def run_inference_on_frame(frame):
             cv2.imwrite(filepath, plot_img)
             cv2.imwrite(CAPTURE_FILE, plot_img)
             image_url = f"http://127.0.0.1:5000/static/logs/health/{filename}"
-            add_log("Weed", cls_name, timestamp_str, image_url, conf, hw_uptime, hw_hum, hw_temp)
+            add_log("Weed", cls_name, timestamp_str, image_url, conf, hw_uptime, hw_hum, hw_temp, "weed.pt")
             update_global_status("Health", "Action Required", cls_name, conf, "amber")
             any_detected = True
             
@@ -182,7 +183,7 @@ def run_inference_on_frame(frame):
             cv2.imwrite(filepath, plot_img)
             cv2.imwrite(CAPTURE_FILE, plot_img)
             image_url = f"http://127.0.0.1:5000/static/logs/health/{filename}"
-            add_log("Insect", cls_name, timestamp_str, image_url, conf, hw_uptime, hw_hum, hw_temp)
+            add_log("Insect", cls_name, timestamp_str, image_url, conf, hw_uptime, hw_hum, hw_temp, "pest.pt")
             update_global_status("Health", "Action Required", cls_name, conf, "amber")
             any_detected = True
                 
@@ -208,6 +209,7 @@ def ai_processing_thread():
                     latest_status["humidity"] = hw_data.get("humidity", 0.0)
                     latest_status["pump"] = hw_data.get("pump_status", "OFF")
                     latest_status["rover"] = current_rover_status
+                    latest_status["motor_uptime_sec"] = hw_data.get("motor_uptime_sec", latest_status.get("motor_uptime_sec", 0))
                     
                 if last_rover_status == "Moving" and current_rover_status == "Scanning":
                     print("Rover transitioned to Scanning, capturing burst...")

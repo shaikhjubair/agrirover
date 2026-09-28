@@ -5,30 +5,50 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Activity, Clock, TerminalSquare, Cpu, MapPin } from 'lucide-react'
 import Link from 'next/link'
 
-const LOGS = [
-  { time: '11:30:45.020 AM', type: 'INFO', source: 'SYS_TICK', message: 'Motor Stopped at 45.5 meters' },
-  { time: '11:30:43.018 AM', type: 'CMD', source: 'HTTP_GET', message: 'Motor Start signal received' },
-  { time: '11:30:38.105 AM', type: 'INFO', source: 'SYS_TICK', message: 'Motor Stopped at 42.0 meters' },
-  { time: '11:30:36.102 AM', type: 'CMD', source: 'HTTP_GET', message: 'Motor Start signal received' },
-  { time: '11:30:31.050 AM', type: 'INFO', source: 'SYS_TICK', message: 'Motor Stopped at 38.5 meters' },
-  { time: '11:30:29.048 AM', type: 'CMD', source: 'HTTP_GET', message: 'Motor Start signal received' },
-  { time: '11:28:10.400 AM', type: 'WARN', source: 'ADC_0', message: 'Gas Sensor threshold triggered (ADC: 3102)' },
-  { time: '11:25:00.000 AM', type: 'SYS', source: 'BOOT', message: 'ESP32 Telemetry Module Initialized' }
-];
-
 export default function MotorStatusPage() {
-  const [status, setStatus] = useState('Moving')
-  const [uptimeSeconds, setUptimeSeconds] = useState(1420)
+  const [status, setStatus] = useState('Offline')
+  const [uptimeSeconds, setUptimeSeconds] = useState(0)
+  const [logs, setLogs] = useState<any[]>([])
 
   // Distance = Total Motor Run Time (s) * 0.5 m/s
   const distance = (uptimeSeconds * 0.5).toFixed(1)
 
-  // Simulate uptime ticking
   useEffect(() => {
-    const timer = setInterval(() => {
-      setUptimeSeconds(prev => prev + 1)
-    }, 1000)
-    return () => clearInterval(timer)
+    const fetchStatus = async () => {
+      try {
+        const res = await fetch('http://127.0.0.1:5000/api/status')
+        if (res.ok) {
+          const data = await res.json()
+          setUptimeSeconds(data.motor_uptime_sec || 0)
+          setStatus(data.rover || 'Unknown')
+        }
+      } catch (e) {
+        console.error('Failed to fetch hardware status', e)
+      }
+    }
+
+    const fetchLogs = async () => {
+      try {
+        const res = await fetch('http://127.0.0.1:5000/api/logs')
+        if (res.ok) {
+          const data = await res.json()
+          setLogs(data)
+        }
+      } catch (e) {
+        console.error('Failed to fetch logs', e)
+      }
+    }
+    
+    fetchStatus()
+    fetchLogs()
+    
+    const statusInterval = setInterval(fetchStatus, 1000)
+    const logsInterval = setInterval(fetchLogs, 2000)
+    
+    return () => {
+      clearInterval(statusInterval)
+      clearInterval(logsInterval)
+    }
   }, [])
 
   return (
@@ -84,8 +104,8 @@ export default function MotorStatusPage() {
             <CardContent className="px-6 pb-6">
               <div className="flex items-center gap-3">
                 <span className="relative flex h-3 w-3">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                  <span className="relative inline-flex rounded-full h-3 w-3 bg-emerald-500"></span>
+                  {status === 'Moving' && <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>}
+                  <span className={`relative inline-flex rounded-full h-3 w-3 ${status === 'Moving' ? 'bg-emerald-500' : 'bg-slate-500'}`}></span>
                 </span>
                 <div className="text-3xl font-bold tracking-tight uppercase">{status}</div>
               </div>
@@ -102,33 +122,41 @@ export default function MotorStatusPage() {
             </div>
           </CardHeader>
           <CardContent className="p-0">
-            <div className="overflow-x-auto">
+            <div className="overflow-x-auto max-h-[400px]">
               <table className="w-full text-sm text-left">
-                <thead className="bg-slate-50 text-[10px] uppercase font-bold text-slate-500 border-b border-slate-200">
+                <thead className="bg-slate-50 text-[10px] uppercase font-bold text-slate-500 border-b border-slate-200 sticky top-0">
                   <tr>
                     <th className="px-6 py-3">Timestamp</th>
                     <th className="px-6 py-3">Type</th>
-                    <th className="px-6 py-3">Source</th>
+                    <th className="px-6 py-3">Model</th>
                     <th className="px-6 py-3">Event Details</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 font-mono text-xs">
-                  {LOGS.map((log, idx) => (
-                    <tr key={idx} className="hover:bg-slate-50/50 transition-colors">
-                      <td className="px-6 py-4 whitespace-nowrap text-slate-500">{log.time}</td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider
-                          ${log.type === 'CMD' ? 'bg-sky-100 text-sky-700' : 
-                            log.type === 'WARN' ? 'bg-amber-100 text-amber-700' : 
-                            log.type === 'SYS' ? 'bg-indigo-100 text-indigo-700' : 
-                            'bg-slate-100 text-slate-700'}`}>
-                          {log.type}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-slate-500">{log.source}</td>
-                      <td className="px-6 py-4 text-slate-700 font-medium">{log.message}</td>
+                  {logs.length === 0 ? (
+                    <tr>
+                      <td colSpan={4} className="px-6 py-8 text-center text-slate-500 font-sans">No events logged yet.</td>
                     </tr>
-                  ))}
+                  ) : (
+                    logs.map((log) => (
+                      <tr key={log.id} className="hover:bg-slate-50/50 transition-colors">
+                        <td className="px-6 py-4 whitespace-nowrap text-slate-500">{log.timestamp}</td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider
+                            ${log.type === 'Security' ? 'bg-rose-100 text-rose-700' : 
+                              log.type === 'Disease' ? 'bg-amber-100 text-amber-700' : 
+                              log.type === 'Insect' ? 'bg-rose-100 text-rose-700' : 
+                              'bg-emerald-100 text-emerald-700'}`}>
+                            {log.type}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-slate-500">{log.model || 'Unknown'}</td>
+                        <td className="px-6 py-4 text-slate-700 font-medium">
+                          Target detected: <span className="font-bold text-slate-900">{log.target}</span> ({log.confidence}% match) at {log.distance}m
+                        </td>
+                      </tr>
+                    ))
+                  )}
                 </tbody>
               </table>
             </div>
