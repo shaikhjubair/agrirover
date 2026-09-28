@@ -37,7 +37,8 @@ latest_status = {
     "target": "All Clear",
     "confidence": 100,
     "color": "emerald",
-    "timestamp": datetime.now().isoformat()
+    "timestamp": datetime.now().isoformat(),
+    "rover_state": "Scanning"
 }
 status_lock = threading.Lock()
 
@@ -161,16 +162,46 @@ def run_inference_on_frame(frame):
     update_global_status("Clear", "Optimal", "All Clear", 100, "emerald")
 
 def ai_processing_thread():
+    import requests
     while True:
-        is_manual = manual_scan_event.wait(5.0)
-        if is_manual:
-            manual_scan_event.clear()
+        with status_lock:
+            latest_status["rover_state"] = "Moving"
             
-        with frame_lock:
-            frame_to_scan = raw_frame.copy() if raw_frame is not None else None
+        try:
+            response = requests.get("http://192.168.4.1/motor?action=move", timeout=10)
+            if response.status_code != 200:
+                print("ESP32 returned error, retrying...")
+                time.sleep(1)
+                continue
+        except Exception as e:
+            print(f"Error connecting to ESP32: {e}")
+            time.sleep(2)
+            continue
             
-        if frame_to_scan is not None:
-            run_inference_on_frame(frame_to_scan)
+        with status_lock:
+            latest_status["rover_state"] = "Scanning"
+            
+        frames = []
+        for _ in range(10):
+            with frame_lock:
+                if raw_frame is not None:
+                    frames.append(raw_frame.copy())
+            time.sleep(0.05)
+            
+        if not frames:
+            continue
+            
+        best_frame = None
+        max_var = -1
+        for frame in frames:
+            gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+            variance = cv2.Laplacian(gray, cv2.CV_64F).var()
+            if variance > max_var:
+                max_var = variance
+                best_frame = frame
+                
+        if best_frame is not None:
+            run_inference_on_frame(best_frame)
 
 def generate_mjpeg():
     while True:
