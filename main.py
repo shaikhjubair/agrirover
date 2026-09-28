@@ -33,12 +33,15 @@ SECURITY_CLASSES = ["person", "bird", "dog", "cow"]
 
 latest_status = {
     "mode": "Clear",
-    "status": "Optimal",
+    "ai_status": "Optimal",
     "target": "All Clear",
     "confidence": 100,
     "color": "emerald",
-    "timestamp": datetime.now().isoformat(),
-    "rover_state": "Scanning"
+    "temperature": 0.0,
+    "humidity": 0.0,
+    "pump": "OFF",
+    "rover": "Moving",
+    "timestamp": datetime.now().isoformat()
 }
 status_lock = threading.Lock()
 
@@ -80,7 +83,7 @@ def update_global_status(mode, status, target, conf, color):
     global latest_status
     with status_lock:
         latest_status["mode"] = mode
-        latest_status["status"] = status
+        latest_status["ai_status"] = status
         latest_status["target"] = target
         latest_status["confidence"] = conf
         latest_status["color"] = color
@@ -163,45 +166,49 @@ def run_inference_on_frame(frame):
 
 def ai_processing_thread():
     import requests
+    last_rover_status = "Moving"
+    
     while True:
-        with status_lock:
-            latest_status["rover_state"] = "Moving"
-            
         try:
-            response = requests.get("http://192.168.4.1/motor?action=move", timeout=10)
-            if response.status_code != 200:
-                print("ESP32 returned error, retrying...")
-                time.sleep(1)
-                continue
-        except Exception as e:
-            print(f"Error connecting to ESP32: {e}")
-            time.sleep(2)
-            continue
-            
-        with status_lock:
-            latest_status["rover_state"] = "Scanning"
-            
-        frames = []
-        for _ in range(10):
-            with frame_lock:
-                if raw_frame is not None:
-                    frames.append(raw_frame.copy())
-            time.sleep(0.05)
-            
-        if not frames:
-            continue
-            
-        best_frame = None
-        max_var = -1
-        for frame in frames:
-            gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-            variance = cv2.Laplacian(gray, cv2.CV_64F).var()
-            if variance > max_var:
-                max_var = variance
-                best_frame = frame
+            response = requests.get("http://192.168.4.1:81", timeout=2)
+            if response.status_code == 200:
+                hw_data = response.json()
+                current_rover_status = hw_data.get("rover_status", "Moving")
                 
-        if best_frame is not None:
-            run_inference_on_frame(best_frame)
+                with status_lock:
+                    latest_status["temperature"] = hw_data.get("temperature", 0.0)
+                    latest_status["humidity"] = hw_data.get("humidity", 0.0)
+                    latest_status["pump"] = hw_data.get("pump_status", "OFF")
+                    latest_status["rover"] = current_rover_status
+                    
+                if last_rover_status == "Moving" and current_rover_status == "Scanning":
+                    print("Rover transitioned to Scanning, capturing burst...")
+                    frames = []
+                    for _ in range(10):
+                        with frame_lock:
+                            if raw_frame is not None:
+                                frames.append(raw_frame.copy())
+                        time.sleep(0.05)
+                        
+                    if frames:
+                        best_frame = None
+                        max_var = -1
+                        for frame in frames:
+                            gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+                            variance = cv2.Laplacian(gray, cv2.CV_64F).var()
+                            if variance > max_var:
+                                max_var = variance
+                                best_frame = frame
+                                
+                        if best_frame is not None:
+                            run_inference_on_frame(best_frame)
+                            
+                last_rover_status = current_rover_status
+                
+        except Exception as e:
+            print(f"Error polling hardware: {e}")
+            
+        time.sleep(0.5)
 
 def generate_mjpeg():
     while True:
