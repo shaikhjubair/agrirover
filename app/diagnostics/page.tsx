@@ -2,71 +2,88 @@
 
 import { useState } from 'react'
 import {
-  Download,
-  FileText,
-  Search,
-  Calendar,
   Target,
-  Zap,
-  Cpu
+  MapPin,
+  Droplets,
+  Bug,
+  Leaf,
+  Activity
 } from 'lucide-react'
-import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
 import Link from 'next/link'
+import { Badge } from '@/components/ui/badge'
 
-const mockLogs = [
+const mockCaptures = [
   {
-    id: 'det-1',
-    type: 'Disease',
-    target: 'Early Blight',
-    confidence: 96,
-    timestamp: '2026-09-29 08:14:22.050',
+    id: 'cap-1',
+    timestamp: '2026-09-29 08:14:22',
     image: 'https://images.unsplash.com/photo-1592841200221-a6898f307baa?q=80&w=600&auto=format&fit=crop',
-    motorUptime: '01:42:15',
+    motorUptimeSecs: 125, // 62.5 meters
+    humidity: 75,
+    detections: [
+      { type: 'Disease', target: 'Early Blight', confidence: 96 },
+      { type: 'Insect', target: 'Aphid Cluster', confidence: 82 }
+    ]
   },
   {
-    id: 'det-2',
-    type: 'Weed',
-    target: 'Bindweed',
-    confidence: 88,
-    timestamp: '2026-09-29 07:45:10.112',
+    id: 'cap-2',
+    timestamp: '2026-09-29 07:45:10',
     image: 'https://images.unsplash.com/photo-1629198728070-6539d0411edc?q=80&w=600&auto=format&fit=crop',
-    motorUptime: '01:12:30',
+    motorUptimeSecs: 45, // 22.5 meters
+    humidity: 55,
+    detections: [
+      { type: 'Weed', target: 'Bindweed', confidence: 88 }
+    ]
   },
   {
-    id: 'det-3',
-    type: 'Disease',
-    target: 'Powdery Mildew',
-    confidence: 91,
-    timestamp: '2026-09-28 16:20:05.400',
+    id: 'cap-3',
+    timestamp: '2026-09-28 16:20:05',
     image: 'https://images.unsplash.com/photo-1598462729906-8d6d634283fc?q=80&w=600&auto=format&fit=crop',
-    motorUptime: '02:55:00',
+    motorUptimeSecs: 210, // 105.0 meters
+    humidity: 35,
+    detections: [
+      { type: 'Disease', target: 'Powdery Mildew', confidence: 91 }
+    ]
   },
   {
-    id: 'det-4',
-    type: 'Security',
-    target: 'Person',
-    confidence: 99,
-    timestamp: '2026-09-28 14:10:00.005',
-    image: 'https://images.unsplash.com/photo-1542108226-9130e1e83cc4?q=80&w=600&auto=format&fit=crop',
-    motorUptime: '01:00:10',
-  },
-]
+    id: 'cap-4',
+    timestamp: '2026-09-28 14:10:00',
+    image: 'https://images.unsplash.com/photo-1625244724120-1fd1d34d00f6?q=80&w=600&auto=format&fit=crop',
+    motorUptimeSecs: 310, // 155.0 meters
+    humidity: 62,
+    detections: [
+      { type: 'Insect', target: 'Whitefly', confidence: 94 },
+      { type: 'Weed', target: 'Thistle', confidence: 78 }
+    ]
+  }
+];
+
+type TabType = 'Weeds' | 'Diseases' | 'Insects';
+const tabMapping: Record<TabType, string> = {
+  'Weeds': 'Weed',
+  'Diseases': 'Disease',
+  'Insects': 'Insect'
+};
 
 export default function DiagnosticsPage() {
-  const [selectedLog, setSelectedLog] = useState(mockLogs[0])
-  const [searchQuery, setSearchQuery] = useState('')
+  const [activeTab, setActiveTab] = useState<TabType>('Weeds')
 
-  const filteredLogs = mockLogs.filter(log => 
-    log.target.toLowerCase().includes(searchQuery.toLowerCase()) || 
-    log.type.toLowerCase().includes(searchQuery.toLowerCase())
+  // Multi-tagging logic: filter captures that contain AT LEAST ONE detection matching the active tab
+  const filteredCaptures = mockCaptures.filter(capture => 
+    capture.detections.some(d => d.type === tabMapping[activeTab])
   )
 
+  const getHumidityStatus = (hum: number) => {
+    if (hum >= 40 && hum <= 70) {
+      return { label: 'Good/Optimal', text: 'text-emerald-700', bg: 'bg-emerald-50', border: 'border-emerald-200' }
+    }
+    return { label: 'Bad/Critical', text: 'text-rose-700', bg: 'bg-rose-50', border: 'border-rose-200' }
+  }
+
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900 pb-12 font-sans selection:bg-slate-200">
+    <div className="min-h-screen bg-slate-50 text-slate-900 pb-16 font-sans selection:bg-slate-200">
       {/* Header */}
-      <header className="sticky top-0 z-30 border-b border-slate-200 bg-white">
-        <div className="mx-auto flex h-[60px] max-w-[1200px] items-center justify-between px-6">
+      <header className="sticky top-0 z-30 border-b border-slate-200 bg-white shadow-sm">
+        <div className="mx-auto flex h-[64px] max-w-[1200px] items-center justify-between px-6">
           <div className="flex items-center gap-6">
             <div className="flex items-center gap-2">
               <Target className="h-5 w-5 text-slate-700" />
@@ -74,110 +91,119 @@ export default function DiagnosticsPage() {
             </div>
             <nav className="hidden md:flex gap-6 text-sm font-semibold text-slate-500">
               <Link href="/" className="hover:text-slate-900 transition-colors">Overview</Link>
-              <span className="text-slate-900 bg-slate-100 px-3 py-1 rounded-md">Diagnostics</span>
+              <span className="text-slate-900 bg-slate-100 px-3 py-1.5 rounded-md">Diagnostics</span>
               <Link href="/motor-status" className="hover:text-slate-900 transition-colors">Motor Status</Link>
             </nav>
-          </div>
-          <div className="flex gap-3">
-            <Button variant="outline" size="sm" className="gap-2 text-xs font-semibold rounded-md shadow-none border-slate-200 hover:bg-slate-50">
-              <FileText className="size-3.5" /> Export CSV
-            </Button>
           </div>
         </div>
       </header>
 
-      <main className="mx-auto mt-8 flex max-w-[1200px] flex-col gap-8 px-6 lg:flex-row">
-        {/* Left Side: Gallery Grid */}
-        <div className="flex-1 space-y-6">
-          <div className="relative max-w-md">
-            <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
-            <input 
-              type="text" 
-              placeholder="Filter by target or type..." 
-              className="w-full rounded-md border border-slate-200 bg-white px-9 py-2 text-sm shadow-sm placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-slate-400 focus:border-slate-400"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-            />
-          </div>
-
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
-            {filteredLogs.map((log) => (
-              <div 
-                key={log.id} 
-                className={`group cursor-pointer overflow-hidden rounded-md border bg-white transition-colors hover:bg-slate-50 ${selectedLog.id === log.id ? 'border-slate-800 ring-1 ring-slate-800' : 'border-slate-200'}`}
-                onClick={() => setSelectedLog(log)}
-              >
-                <div className="aspect-[4/3] w-full overflow-hidden bg-slate-100 border-b border-slate-100">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={log.image} alt={log.target} className="h-full w-full object-cover" />
-                </div>
-                <div className="p-3">
-                  <div className="flex items-center justify-between mb-1">
-                    <h3 className="font-semibold text-sm text-slate-900 truncate">{log.target}</h3>
-                    <Badge variant="secondary" className="text-[10px] uppercase font-bold tracking-wider rounded-sm px-1.5 py-0 bg-slate-100 text-slate-600 hover:bg-slate-200 border-0">
-                      {log.type}
-                    </Badge>
-                  </div>
-                  <div className="text-[11px] text-slate-500 font-mono">
-                    {log.timestamp}
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
+      <main className="mx-auto mt-8 max-w-[1200px] px-6">
+        
+        {/* 3-Tab Layout Navigation */}
+        <div className="flex items-center gap-2 border-b border-slate-200 mb-8">
+          {(['Weeds', 'Diseases', 'Insects'] as TabType[]).map((tab) => (
+            <button
+              key={tab}
+              onClick={() => setActiveTab(tab)}
+              className={`flex items-center gap-2 px-6 py-3 text-sm font-bold border-b-2 transition-colors ${
+                activeTab === tab 
+                  ? 'border-slate-900 text-slate-900' 
+                  : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'
+              }`}
+            >
+              {tab === 'Weeds' && <Leaf className="h-4 w-4" />}
+              {tab === 'Diseases' && <Activity className="h-4 w-4" />}
+              {tab === 'Insects' && <Bug className="h-4 w-4" />}
+              {tab}
+            </button>
+          ))}
         </div>
 
-        {/* Right Side: Detailed Metadata Panel */}
-        <aside className="w-full lg:w-[400px]">
-          <div className="sticky top-24 border border-slate-200 bg-white rounded-md shadow-sm overflow-hidden">
-            <div className="aspect-video w-full bg-slate-100 border-b border-slate-200">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={selectedLog.image} alt={selectedLog.target} className="h-full w-full object-cover" />
-            </div>
-
-            <div className="p-6">
-              <div className="mb-6 flex items-start justify-between">
-                <div>
-                  <h2 className="text-xl font-bold text-slate-900 tracking-tight">{selectedLog.target}</h2>
-                  <p className="text-[11px] font-bold text-slate-500 mt-1 uppercase tracking-wider">{selectedLog.type} Detection</p>
-                </div>
-                <Button variant="outline" size="sm" className="h-8 shadow-none border-slate-200 text-slate-600 gap-2 hover:bg-slate-50">
-                  <Download className="size-3.5" /> Image
-                </Button>
-              </div>
-
-              <div className="space-y-0 text-sm border-t border-slate-200">
-                <div className="flex items-center justify-between py-3 border-b border-slate-100">
-                  <span className="flex items-center gap-2 text-slate-500 font-medium">
-                    <Calendar className="size-4" /> Capture Time
-                  </span>
-                  <span className="font-mono text-slate-900">{selectedLog.timestamp}</span>
-                </div>
-                
-                <div className="flex items-center justify-between py-3 border-b border-slate-100">
-                  <span className="flex items-center gap-2 text-slate-500 font-medium">
-                    <Cpu className="size-4" /> Motor Uptime
-                  </span>
-                  <span className="font-mono text-slate-900">{selectedLog.motorUptime}</span>
-                </div>
-
-                <div className="flex items-center justify-between py-3 border-b border-slate-100">
-                  <span className="flex items-center gap-2 text-slate-500 font-medium">
-                    <Zap className="size-4" /> AI Confidence
-                  </span>
-                  <span className="font-mono text-slate-900">{selectedLog.confidence}%</span>
-                </div>
-                
-                <div className="flex items-center justify-between py-3 border-b border-slate-100">
-                  <span className="flex items-center gap-2 text-slate-500 font-medium">
-                    <Target className="size-4" /> AI Model
-                  </span>
-                  <span className="font-mono text-slate-900">YOLOv8s</span>
-                </div>
-              </div>
-            </div>
+        {/* Gallery Grid */}
+        {filteredCaptures.length === 0 ? (
+          <div className="text-center py-20 bg-white border border-slate-200 rounded-lg">
+            <p className="text-slate-500 font-medium">No {activeTab.toLowerCase()} detected in the current logs.</p>
           </div>
-        </aside>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {filteredCaptures.map(capture => {
+              const distance = (capture.motorUptimeSecs * 0.5).toFixed(1)
+              const humStatus = getHumidityStatus(capture.humidity)
+
+              return (
+                <div key={capture.id} className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm hover:shadow-md transition-shadow flex flex-col">
+                  {/* Image Section */}
+                  <div className="relative aspect-[4/3] w-full bg-slate-100 border-b border-slate-200 overflow-hidden group">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img 
+                      src={capture.image} 
+                      alt="Captured detection" 
+                      className="h-full w-full object-cover transition-transform duration-700 group-hover:scale-105" 
+                    />
+                    <div className="absolute top-3 right-3 flex flex-col gap-1.5 items-end">
+                      {capture.detections.map((det, idx) => (
+                        <Badge 
+                          key={idx} 
+                          className={`shadow-sm px-2.5 py-0.5 text-[10px] uppercase font-bold tracking-wider border-0 ${
+                            det.type === 'Disease' ? 'bg-amber-100 text-amber-800' :
+                            det.type === 'Insect' ? 'bg-rose-100 text-rose-800' :
+                            'bg-emerald-100 text-emerald-800'
+                          }`}
+                        >
+                          {det.target} ({det.confidence}%)
+                        </Badge>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Metadata Section */}
+                  <div className="p-5 flex-1 flex flex-col gap-4">
+                    {/* Title / Targets */}
+                    <div>
+                      <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">Detected Objects</p>
+                      <h3 className="font-bold text-slate-900 leading-tight">
+                        {capture.detections.map(d => d.target).join(' + ')}
+                      </h3>
+                      <p className="text-[11px] text-slate-500 font-mono mt-1">{capture.timestamp}</p>
+                    </div>
+
+                    <div className="h-[1px] bg-slate-100 w-full" />
+
+                    {/* Sensor Data & Telemetry */}
+                    <div className="grid grid-cols-1 gap-3">
+                      {/* Distance */}
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2 text-slate-500">
+                          <MapPin className="h-4 w-4" />
+                          <span className="text-xs font-semibold uppercase tracking-wider">Location</span>
+                        </div>
+                        <span className="text-sm font-mono font-bold text-slate-800">
+                          {distance}m <span className="text-slate-400 text-xs font-sans font-normal ml-1">(from start)</span>
+                        </span>
+                      </div>
+
+                      {/* Humidity */}
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2 text-slate-500">
+                          <Droplets className="h-4 w-4" />
+                          <span className="text-xs font-semibold uppercase tracking-wider">DHT11 Hum</span>
+                        </div>
+                        <div className={`flex items-center gap-1.5 px-2 py-0.5 rounded border ${humStatus.bg} ${humStatus.border}`}>
+                          <span className={`text-xs font-mono font-bold ${humStatus.text}`}>{capture.humidity}%</span>
+                          <span className={`text-[10px] font-bold uppercase tracking-wider ${humStatus.text}`}>
+                            {humStatus.label}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        )}
       </main>
     </div>
   )
