@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import {
   Target,
   MapPin,
@@ -12,51 +12,6 @@ import {
 import Link from 'next/link'
 import { Badge } from '@/components/ui/badge'
 
-const mockCaptures = [
-  {
-    id: 'cap-1',
-    timestamp: '2026-09-29 08:14:22',
-    image: 'https://images.unsplash.com/photo-1592841200221-a6898f307baa?q=80&w=600&auto=format&fit=crop',
-    motorUptimeSecs: 125, // 62.5 meters
-    humidity: 75,
-    detections: [
-      { type: 'Disease', target: 'Early Blight', confidence: 96 },
-      { type: 'Insect', target: 'Aphid Cluster', confidence: 82 }
-    ]
-  },
-  {
-    id: 'cap-2',
-    timestamp: '2026-09-29 07:45:10',
-    image: 'https://images.unsplash.com/photo-1629198728070-6539d0411edc?q=80&w=600&auto=format&fit=crop',
-    motorUptimeSecs: 45, // 22.5 meters
-    humidity: 55,
-    detections: [
-      { type: 'Weed', target: 'Bindweed', confidence: 88 }
-    ]
-  },
-  {
-    id: 'cap-3',
-    timestamp: '2026-09-28 16:20:05',
-    image: 'https://images.unsplash.com/photo-1598462729906-8d6d634283fc?q=80&w=600&auto=format&fit=crop',
-    motorUptimeSecs: 210, // 105.0 meters
-    humidity: 35,
-    detections: [
-      { type: 'Disease', target: 'Powdery Mildew', confidence: 91 }
-    ]
-  },
-  {
-    id: 'cap-4',
-    timestamp: '2026-09-28 14:10:00',
-    image: 'https://images.unsplash.com/photo-1625244724120-1fd1d34d00f6?q=80&w=600&auto=format&fit=crop',
-    motorUptimeSecs: 310, // 155.0 meters
-    humidity: 62,
-    detections: [
-      { type: 'Insect', target: 'Whitefly', confidence: 94 },
-      { type: 'Weed', target: 'Thistle', confidence: 78 }
-    ]
-  }
-];
-
 type TabType = 'Weeds' | 'Diseases' | 'Insects';
 const tabMapping: Record<TabType, string> = {
   'Weeds': 'Weed',
@@ -66,11 +21,28 @@ const tabMapping: Record<TabType, string> = {
 
 export default function DiagnosticsPage() {
   const [activeTab, setActiveTab] = useState<TabType>('Weeds')
+  const [logs, setLogs] = useState<any[]>([])
 
-  // Multi-tagging logic: filter captures that contain AT LEAST ONE detection matching the active tab
-  const filteredCaptures = mockCaptures.filter(capture => 
-    capture.detections.some(d => d.type === tabMapping[activeTab])
-  )
+  useEffect(() => {
+    const fetchLogs = async () => {
+      try {
+        const res = await fetch('http://127.0.0.1:5000/api/logs')
+        if (res.ok) {
+          const data = await res.json()
+          setLogs(data)
+        }
+      } catch (e) {
+        console.error('Failed to fetch logs', e)
+      }
+    }
+    
+    fetchLogs()
+    const interval = setInterval(fetchLogs, 2000)
+    return () => clearInterval(interval)
+  }, [])
+
+  // Filter captures that match the active tab type
+  const filteredCaptures = logs.filter(log => log.type === tabMapping[activeTab])
 
   const getHumidityStatus = (hum: number) => {
     if (hum >= 40 && hum <= 70) {
@@ -128,7 +100,7 @@ export default function DiagnosticsPage() {
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {filteredCaptures.map(capture => {
-              const distance = (capture.motorUptimeSecs * 0.5).toFixed(1)
+              const distance = capture.distance || (capture.motorUptimeSecs * 0.5).toFixed(1)
               const humStatus = getHumidityStatus(capture.humidity)
 
               return (
@@ -142,18 +114,15 @@ export default function DiagnosticsPage() {
                       className="h-full w-full object-cover transition-transform duration-700 group-hover:scale-105" 
                     />
                     <div className="absolute top-3 right-3 flex flex-col gap-1.5 items-end">
-                      {capture.detections.map((det, idx) => (
                         <Badge 
-                          key={idx} 
                           className={`shadow-sm px-2.5 py-0.5 text-[10px] uppercase font-bold tracking-wider border-0 ${
-                            det.type === 'Disease' ? 'bg-amber-100 text-amber-800' :
-                            det.type === 'Insect' ? 'bg-rose-100 text-rose-800' :
+                            capture.type === 'Disease' ? 'bg-amber-100 text-amber-800' :
+                            capture.type === 'Insect' ? 'bg-rose-100 text-rose-800' :
                             'bg-emerald-100 text-emerald-800'
                           }`}
                         >
-                          {det.target} ({det.confidence}%)
+                          {capture.target} ({capture.confidence}%)
                         </Badge>
-                      ))}
                     </div>
                   </div>
 
@@ -161,9 +130,9 @@ export default function DiagnosticsPage() {
                   <div className="p-5 flex-1 flex flex-col gap-4">
                     {/* Title / Targets */}
                     <div>
-                      <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">Detected Objects</p>
+                      <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">Detected Object</p>
                       <h3 className="font-bold text-slate-900 leading-tight">
-                        {capture.detections.map(d => d.target).join(' + ')}
+                        {capture.target}
                       </h3>
                       <p className="text-[11px] text-slate-500 font-mono mt-1">{capture.timestamp}</p>
                     </div>
@@ -190,7 +159,7 @@ export default function DiagnosticsPage() {
                           <span className="text-xs font-semibold uppercase tracking-wider">DHT11 Hum</span>
                         </div>
                         <div className={`flex items-center gap-1.5 px-2 py-0.5 rounded border ${humStatus.bg} ${humStatus.border}`}>
-                          <span className={`text-xs font-mono font-bold ${humStatus.text}`}>{capture.humidity}%</span>
+                          <span className={`text-xs font-mono font-bold ${humStatus.text}`}>{capture.humidity || 0}%</span>
                           <span className={`text-[10px] font-bold uppercase tracking-wider ${humStatus.text}`}>
                             {humStatus.label}
                           </span>

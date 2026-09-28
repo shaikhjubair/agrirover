@@ -14,10 +14,10 @@ CORS(app)
 model_general = YOLO("yolov8n.pt")
 model_disease = YOLO("best.pt")
 try:
-    model_weed = YOLO("weed.pt")
+    model_pest = YOLO("pest.pt")
 except Exception:
-    print("Warning: weed.pt not found. Falling back to best.pt for weed detection.")
-    model_weed = model_disease
+    print("Warning: pest.pt not found. Falling back to best.pt for pest detection.")
+    model_pest = model_disease
 
 CAMERA_URL = "http://192.168.4.1:81/stream"
 
@@ -41,6 +41,7 @@ latest_status = {
     "humidity": 0.0,
     "pump": "OFF",
     "rover": "Moving",
+    "motor_uptime_sec": 0,
     "timestamp": datetime.now().isoformat()
 }
 status_lock = threading.Lock()
@@ -66,13 +67,18 @@ def camera_thread():
         with frame_lock:
             raw_frame = frame.copy()
 
-def add_log(mode_str, target_name, timestamp_str, image_url):
+def add_log(type_str, target_name, timestamp_str, image_url, conf, uptime, hum, temp):
     log_entry = {
         "id": str(uuid.uuid4()),
-        "mode": mode_str,
+        "type": type_str,
         "target": target_name,
+        "confidence": conf,
         "timestamp": timestamp_str,
-        "image_url": image_url
+        "image": image_url,
+        "motorUptimeSecs": uptime,
+        "humidity": hum,
+        "temperature": temp,
+        "distance": round(uptime * 0.5, 1)
     }
     with logs_lock:
         event_logs.insert(0, log_entry)
@@ -93,6 +99,11 @@ def run_inference_on_frame(frame):
     timestamp_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     timestamp_file = datetime.now().strftime("%Y%m%d_%H%M%S")
     
+    with status_lock:
+        hw_uptime = latest_status.get("motor_uptime_sec", 0)
+        hw_hum = latest_status.get("humidity", 0.0)
+        hw_temp = latest_status.get("temperature", 0.0)
+
     # STEP A: Security
     res_gen = model_general.predict(frame, conf=0.50, verbose=False)
     sec_threat = None
@@ -116,53 +127,70 @@ def run_inference_on_frame(frame):
         cv2.imwrite(CAPTURE_FILE, annotated_frame)
         
         image_url = f"http://127.0.0.1:5000/static/logs/security/{filename}"
-        add_log("Security", sec_threat.capitalize(), timestamp_str, image_url)
+        add_log("Security", sec_threat.capitalize(), timestamp_str, image_url, sec_conf, hw_uptime, hw_hum, hw_temp)
         update_global_status("Security", "Intruder Alert", sec_threat.capitalize(), sec_conf, "rose")
         return
 
-    # STEP B: Health / Weeds
+    # STEP B: Multi-Model Inference (Disease, Weed, Pest)
     res_dis = model_disease.predict(frame, conf=0.60, verbose=False)
     res_weed = model_weed.predict(frame, conf=0.60, verbose=False)
+    res_pest = model_pest.predict(frame, conf=0.60, verbose=False)
     
-    best_health_threat = None
-    best_health_conf = 0
-    best_plot = None
+    any_detected = False
     
-    # Check disease
+    # 1. Check Disease
     if len(res_dis[0].boxes) > 0:
         box = max(res_dis[0].boxes, key=lambda b: b.conf[0].item())
         cls_name = model_disease.names[int(box.cls[0].item())]
         if cls_name != "Clear":
-            best_health_threat = cls_name
-            best_health_conf = int(box.conf[0].item() * 100)
-            best_plot = res_dis[0].plot()
+            conf = int(box.conf[0].item() * 100)
+            plot_img = res_dis[0].plot()
+            filename = f"hlth_disease_{timestamp_file}.jpg"
+            filepath = os.path.join(HEALTH_DIR, filename)
+            cv2.imwrite(filepath, plot_img)
+            cv2.imwrite(CAPTURE_FILE, plot_img) # Update latest capture
+            image_url = f"http://127.0.0.1:5000/static/logs/health/{filename}"
+            add_log("Disease", cls_name, timestamp_str, image_url, conf, hw_uptime, hw_hum, hw_temp)
+            update_global_status("Health", "Action Required", cls_name, conf, "amber")
+            any_detected = True
 
-    # Check weed
+    # 2. Check Weed
     if len(res_weed[0].boxes) > 0:
         box = max(res_weed[0].boxes, key=lambda b: b.conf[0].item())
         cls_name = model_weed.names[int(box.cls[0].item())]
         if cls_name != "Clear":
             conf = int(box.conf[0].item() * 100)
-            if conf > best_health_conf:
-                best_health_threat = cls_name
-                best_health_conf = conf
-                best_plot = res_weed[0].plot()
+            plot_img = res_weed[0].plot()
+            filename = f"hlth_weed_{timestamp_file}.jpg"
+            filepath = os.path.join(HEALTH_DIR, filename)
+            cv2.imwrite(filepath, plot_img)
+            cv2.imwrite(CAPTURE_FILE, plot_img)
+            image_url = f"http://127.0.0.1:5000/static/logs/health/{filename}"
+            add_log("Weed", cls_name, timestamp_str, image_url, conf, hw_uptime, hw_hum, hw_temp)
+            update_global_status("Health", "Action Required", cls_name, conf, "amber")
+            any_detected = True
+            
+    # 3. Check Pest (Insect)
+    if len(res_pest[0].boxes) > 0:
+        box = max(res_pest[0].boxes, key=lambda b: b.conf[0].item())
+        cls_name = model_pest.names[int(box.cls[0].item())]
+        if cls_name != "Clear":
+            conf = int(box.conf[0].item() * 100)
+            plot_img = res_pest[0].plot()
+            filename = f"hlth_pest_{timestamp_file}.jpg"
+            filepath = os.path.join(HEALTH_DIR, filename)
+            cv2.imwrite(filepath, plot_img)
+            cv2.imwrite(CAPTURE_FILE, plot_img)
+            image_url = f"http://127.0.0.1:5000/static/logs/health/{filename}"
+            add_log("Insect", cls_name, timestamp_str, image_url, conf, hw_uptime, hw_hum, hw_temp)
+            update_global_status("Health", "Action Required", cls_name, conf, "amber")
+            any_detected = True
                 
-    if best_health_threat:
-        filename = f"hlth_{timestamp_file}.jpg"
-        filepath = os.path.join(HEALTH_DIR, filename)
-        cv2.imwrite(filepath, best_plot)
-        cv2.imwrite(CAPTURE_FILE, best_plot)
-        
-        image_url = f"http://127.0.0.1:5000/static/logs/health/{filename}"
-        add_log("Health", best_health_threat, timestamp_str, image_url)
-        update_global_status("Health", "Action Required", best_health_threat, best_health_conf, "amber")
-        return
-        
     # STEP C: Clear
-    plot_frame = res_dis[0].plot()
-    cv2.imwrite(CAPTURE_FILE, plot_frame)
-    update_global_status("Clear", "Optimal", "All Clear", 100, "emerald")
+    if not any_detected:
+        plot_frame = res_dis[0].plot()
+        cv2.imwrite(CAPTURE_FILE, plot_frame)
+        update_global_status("Clear", "Optimal", "All Clear", 100, "emerald")
 
 def ai_processing_thread():
     import requests
