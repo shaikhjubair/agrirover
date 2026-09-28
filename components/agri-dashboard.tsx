@@ -1,5 +1,6 @@
 'use client'
 
+import Link from 'next/link'
 import { useState, useEffect } from 'react'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
@@ -134,9 +135,9 @@ export function AgriDashboard() {
           </div>
           
           <nav className="hidden md:flex items-center gap-8 text-sm font-semibold text-slate-500">
-            <a className="text-emerald-700 bg-emerald-50 px-4 py-2 rounded-full transition-colors" href="#overview">Overview</a>
-            <a className="hover:text-slate-900 transition-colors" href="#diagnostics">Diagnostics</a>
-            <a className="hover:text-slate-900 transition-colors" href="#health">Rover Health</a>
+            <Link className="text-emerald-700 bg-emerald-50 px-4 py-2 rounded-full transition-colors" href="/">Overview</Link>
+            <Link className="hover:text-slate-900 transition-colors" href="/diagnostics">Diagnostics</Link>
+            <Link className="hover:text-slate-900 transition-colors" href="/motor-status">Rover Health</Link>
           </nav>
           
           <div className="flex items-center gap-4">
@@ -159,6 +160,13 @@ export function AgriDashboard() {
           </div>
         </div>
       </header>
+      {menuOpen && (
+        <div className="flex flex-col gap-4 border-b border-slate-200/80 bg-white px-6 py-6 text-sm font-bold text-slate-600 md:hidden shadow-lg absolute w-full z-10">
+          <Link href="/" className="hover:text-slate-900" onClick={() => setMenuOpen(false)}>Overview</Link>
+          <Link href="/diagnostics" className="hover:text-slate-900" onClick={() => setMenuOpen(false)}>Diagnostics</Link>
+          <Link href="/motor-status" className="hover:text-slate-900" onClick={() => setMenuOpen(false)}>Rover Health</Link>
+        </div>
+      )}
 
       <div className="mx-auto max-w-[1440px] px-5 py-8 sm:px-8 lg:px-12 lg:py-10">
         <section id="overview" className="mb-8 flex flex-col justify-between gap-5 sm:flex-row sm:items-end">
