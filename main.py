@@ -3,6 +3,7 @@ import threading
 import time
 import os
 import uuid
+import requests
 from datetime import datetime
 from flask import Flask, Response, jsonify, send_file, make_response
 from flask_cors import CORS
@@ -18,6 +19,11 @@ try:
 except Exception:
     print("Warning: pest.pt not found. Falling back to best.pt for pest detection.")
     model_pest = model_disease
+try:
+    model_weed = YOLO("weed.pt")
+except Exception:
+    print("Warning: weed.pt not found. Falling back to best.pt for weed detection.")
+    model_weed = model_disease
 
 CAMERA_URL = "http://192.168.4.1:81/stream"
 
@@ -41,6 +47,7 @@ latest_status = {
     "humidity": 0.0,
     "pump": "OFF",
     "rover": "Moving",
+    "direction": "Forwarding",
     "motor_uptime_sec": 0,
     "timestamp": datetime.now().isoformat()
 }
@@ -70,7 +77,7 @@ def camera_thread():
 def add_log(type_str, target_name, timestamp_str, image_url, conf, uptime, hum, temp, model_name="YOLOv8"):
     log_entry = {
         "id": str(uuid.uuid4()),
-        "type": type_str,
+        "mode": type_str,
         "target": target_name,
         "confidence": conf,
         "timestamp": timestamp_str,
@@ -194,7 +201,6 @@ def run_inference_on_frame(frame):
         update_global_status("Clear", "Optimal", "All Clear", 100, "emerald")
 
 def ai_processing_thread():
-    import requests
     last_rover_status = "Moving"
     
     while True:
@@ -209,6 +215,7 @@ def ai_processing_thread():
                     latest_status["humidity"] = hw_data.get("humidity", 0.0)
                     latest_status["pump"] = hw_data.get("pump_status", "OFF")
                     latest_status["rover"] = current_rover_status
+                    latest_status["direction"] = hw_data.get("direction", "Forwarding")
                     latest_status["motor_uptime_sec"] = hw_data.get("motor_uptime_sec", latest_status.get("motor_uptime_sec", 0))
                     
                 if last_rover_status == "Moving" and current_rover_status == "Scanning":
@@ -282,6 +289,16 @@ def api_latest_capture():
 def api_manual_scan():
     manual_scan_event.set()
     return jsonify({"status": "Scan initiated"})
+
+@app.route('/api/reverse_motor', methods=['POST'])
+def api_reverse_motor():
+    try:
+        res = requests.get("http://192.168.4.1:81/reverse", timeout=3)
+        if res.status_code == 200:
+            return jsonify({"status": "Success", "message": "Motor direction toggled"})
+        return jsonify({"status": "Error", "message": f"Hardware returned {res.status_code}"}), 502
+    except Exception as e:
+        return jsonify({"status": "Error", "message": str(e)}), 500
 
 if __name__ == '__main__':
     print("Starting Raw Camera Thread...")

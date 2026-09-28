@@ -178,7 +178,7 @@ export function AgriDashboard() {
             <p className="mt-2 text-sm font-medium text-slate-500">Live intelligence and weed detection from Greenhouse A · Rover 01</p>
           </div>
           <Button 
-            className="w-fit rounded-xl bg-slate-900 text-white px-6 py-6 text-sm font-bold shadow-xl shadow-slate-300 hover:bg-emerald-600 hover:shadow-emerald-200 transition-all duration-300" 
+            className="w-fit rounded-xl bg-slate-900 text-white px-6 py-6 text-sm font-bold shadow-sm hover:bg-emerald-600 transition-all duration-300" 
             onClick={handleScan}
           >
             <ScanLine className="mr-2 size-5" />
@@ -188,7 +188,7 @@ export function AgriDashboard() {
 
         <section className="grid gap-6 xl:grid-cols-[minmax(0,1.5fr)_400px]">
           <div className="flex flex-col gap-6">
-            <Card className="overflow-hidden rounded-[32px] border border-white bg-white shadow-[0_20px_60px_rgba(45,85,64,0.06)]">
+            <Card className="overflow-hidden rounded-[32px] border border-white bg-white shadow-sm">
               <CardHeader className="flex flex-row items-center justify-between px-6 pb-4 pt-6 sm:px-8 sm:pt-8">
                 <div>
                   <CardTitle className="text-xl font-bold tracking-tight">AI Vision Feed</CardTitle>
@@ -214,7 +214,7 @@ export function AgriDashboard() {
               </CardContent>
             </Card>
 
-            <div id="diagnostics" className={`relative overflow-hidden rounded-[32px] p-8 transition-all duration-500 shadow-2xl border ${
+            <div id="diagnostics" className={`relative overflow-hidden rounded-[32px] p-8 transition-all duration-500 shadow-sm border ${
               isThreatActive 
                 ? 'bg-gradient-to-br from-rose-500 via-rose-600 to-red-700 text-white shadow-rose-500/30 border-rose-400' 
                 : 'bg-gradient-to-br from-emerald-400 to-teal-500 text-white shadow-emerald-500/20 border-emerald-300'
@@ -258,7 +258,7 @@ export function AgriDashboard() {
           </div>
 
           <aside id="health" className="flex flex-col gap-6">
-            <Card className="rounded-[32px] border border-white bg-white shadow-[0_20px_60px_rgba(45,85,64,0.06)]">
+            <Card className="rounded-[32px] border border-white bg-white shadow-sm">
               <CardHeader className="flex flex-row items-center justify-between px-8 pb-2 pt-8">
                 <div>
                   <CardTitle className="text-lg font-bold">Rover Telemetry</CardTitle>
@@ -294,7 +294,7 @@ export function AgriDashboard() {
               </CardContent>
             </Card>
 
-            <Card className="rounded-[32px] border-0 bg-gradient-to-br from-slate-900 to-slate-800 text-white shadow-[0_20px_60px_rgba(15,23,42,0.2)] relative overflow-hidden">
+            <Card className="rounded-[32px] border-0 bg-gradient-to-br from-slate-900 to-slate-800 text-white shadow-sm relative overflow-hidden">
               <div className="absolute top-0 right-0 p-6 opacity-10">
                 <Radio className="size-24" />
               </div>
@@ -333,7 +333,7 @@ export function AgriDashboard() {
           ) : (
             <div className="flex gap-5 overflow-x-auto pb-8 snap-x">
               {logs.map((log) => (
-                <Card key={log.id} className="min-w-[300px] shrink-0 overflow-hidden rounded-[28px] border border-white shadow-[0_15px_40px_rgba(0,0,0,0.06)] snap-start group cursor-pointer hover:-translate-y-1 transition-transform duration-300">
+                <Card key={log.id} className="min-w-[300px] shrink-0 overflow-hidden rounded-[28px] border border-slate-200 shadow-sm snap-start group cursor-pointer hover:-translate-y-1 transition-transform duration-300">
                   <div className="h-[180px] w-full bg-slate-100 relative overflow-hidden">
                     <img src={log.image_url} alt={log.target} className="h-full w-full object-cover group-hover:scale-105 transition-transform duration-500" />
                     <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />

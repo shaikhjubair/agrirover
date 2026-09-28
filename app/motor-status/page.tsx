@@ -2,13 +2,17 @@
 
 import React, { useState, useEffect } from 'react'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
-import { Activity, Clock, TerminalSquare, Cpu, MapPin } from 'lucide-react'
+import { Activity, Clock, TerminalSquare, Cpu, MapPin, ArrowUpRight, ArrowDownLeft, RefreshCcw } from 'lucide-react'
 import Link from 'next/link'
+import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
 
 export default function MotorStatusPage() {
   const [status, setStatus] = useState('Offline')
+  const [direction, setDirection] = useState('Forwarding')
   const [uptimeSeconds, setUptimeSeconds] = useState(0)
   const [logs, setLogs] = useState<any[]>([])
+  const [isReversing, setIsReversing] = useState(false)
 
   // Distance = Total Motor Run Time (s) * 0.5 m/s
   const distance = (uptimeSeconds * 0.5).toFixed(1)
@@ -21,6 +25,7 @@ export default function MotorStatusPage() {
           const data = await res.json()
           setUptimeSeconds(data.motor_uptime_sec || 0)
           setStatus(data.rover || 'Unknown')
+          setDirection(data.direction || 'Forwarding')
         }
       } catch (e) {
         console.error('Failed to fetch hardware status', e)
@@ -51,10 +56,21 @@ export default function MotorStatusPage() {
     }
   }, [])
 
+  const handleReverse = async () => {
+    setIsReversing(true)
+    try {
+      await fetch('http://127.0.0.1:5000/api/reverse_motor', { method: 'POST' })
+    } catch (e) {
+      console.error('Failed to reverse motor', e)
+    } finally {
+      setTimeout(() => setIsReversing(false), 500)
+    }
+  }
+
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 pb-12 font-sans selection:bg-slate-200">
       <header className="sticky top-0 z-20 border-b border-slate-200 bg-white/95 backdrop-blur-sm mb-8">
-        <div className="mx-auto flex h-[60px] max-w-[1200px] items-center justify-between px-6">
+        <div className="mx-auto flex h-[64px] max-w-[1200px] items-center justify-between px-6">
           <div className="flex items-center gap-6">
             <h1 className="text-lg font-bold tracking-tight text-slate-900 flex items-center gap-2">
               <Cpu className="h-5 w-5 text-slate-700" /> ESP32 Telemetry
@@ -65,12 +81,24 @@ export default function MotorStatusPage() {
               <span className="text-slate-900 bg-slate-100 px-3 py-1 rounded-md">Motor Status</span>
             </nav>
           </div>
+          <div className="flex items-center gap-3">
+            <Button 
+              variant="outline" 
+              size="sm" 
+              onClick={handleReverse} 
+              disabled={isReversing}
+              className="gap-2 text-xs font-semibold rounded-md shadow-sm border-slate-200 hover:bg-slate-50 transition-all active:scale-95"
+            >
+              <RefreshCcw className={`size-3.5 ${isReversing ? 'animate-spin text-emerald-500' : 'text-slate-600'}`} /> 
+              {isReversing ? 'Reversing...' : 'Reverse Direction'}
+            </Button>
+          </div>
         </div>
       </header>
 
       <div className="mx-auto max-w-[1200px] px-6 space-y-6">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <Card className="rounded-lg border border-slate-200 bg-white shadow-sm">
+          <Card className="rounded-lg border border-slate-200 bg-white shadow-sm hover:shadow-md transition-shadow">
             <CardHeader className="flex flex-row items-center justify-between pb-2 pt-6 px-6">
               <CardTitle className="text-xs font-bold uppercase tracking-wider text-slate-500">Total Motor Run Time</CardTitle>
               <Clock className="h-4 w-4 text-slate-400" />
@@ -83,7 +111,7 @@ export default function MotorStatusPage() {
             </CardContent>
           </Card>
 
-          <Card className="rounded-lg border border-slate-200 bg-white shadow-sm">
+          <Card className="rounded-lg border border-slate-200 bg-white shadow-sm hover:shadow-md transition-shadow">
             <CardHeader className="flex flex-row items-center justify-between pb-2 pt-6 px-6">
               <CardTitle className="text-xs font-bold uppercase tracking-wider text-slate-500">Distance Covered</CardTitle>
               <MapPin className="h-4 w-4 text-slate-400" />
@@ -96,18 +124,35 @@ export default function MotorStatusPage() {
             </CardContent>
           </Card>
 
-          <Card className="rounded-lg border border-slate-200 bg-slate-900 text-white shadow-sm">
-            <CardHeader className="flex flex-row items-center justify-between pb-2 pt-6 px-6">
+          <Card className="rounded-lg border border-slate-200 bg-slate-900 text-white shadow-sm hover:shadow-md transition-shadow relative overflow-hidden">
+            {/* Subtle gradient accent for the dark card */}
+            <div className="absolute top-0 right-0 p-32 bg-emerald-500/10 blur-[50px] rounded-full pointer-events-none" />
+            
+            <CardHeader className="flex flex-row items-center justify-between pb-2 pt-6 px-6 relative z-10">
               <CardTitle className="text-xs font-bold uppercase tracking-wider text-slate-400">Current State</CardTitle>
               <Activity className="h-4 w-4 text-slate-400" />
             </CardHeader>
-            <CardContent className="px-6 pb-6">
-              <div className="flex items-center gap-3">
-                <span className="relative flex h-3 w-3">
-                  {status === 'Moving' && <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>}
-                  <span className={`relative inline-flex rounded-full h-3 w-3 ${status === 'Moving' ? 'bg-emerald-500' : 'bg-slate-500'}`}></span>
-                </span>
-                <div className="text-3xl font-bold tracking-tight uppercase">{status}</div>
+            <CardContent className="px-6 pb-6 relative z-10">
+              <div className="flex flex-col gap-2">
+                <div className="flex items-center gap-3">
+                  <span className="relative flex h-3 w-3">
+                    {status === 'Moving' && <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>}
+                    <span className={`relative inline-flex rounded-full h-3 w-3 ${status === 'Moving' ? 'bg-emerald-500' : 'bg-slate-500'}`}></span>
+                  </span>
+                  <div className="text-3xl font-bold tracking-tight uppercase">{status}</div>
+                </div>
+                
+                {/* Direction Badge */}
+                <div className="mt-1">
+                  <Badge variant="secondary" className="px-2 py-0.5 text-[10px] uppercase font-bold tracking-wider bg-white/10 text-slate-300 hover:bg-white/20 border-0 flex items-center gap-1.5 w-fit">
+                    {direction === 'Forwarding' ? (
+                      <ArrowUpRight className="size-3 text-emerald-400" />
+                    ) : (
+                      <ArrowDownLeft className="size-3 text-rose-400" />
+                    )}
+                    {direction}
+                  </Badge>
+                </div>
               </div>
             </CardContent>
           </Card>
@@ -118,13 +163,13 @@ export default function MotorStatusPage() {
             <TerminalSquare className="h-5 w-5 text-slate-400" />
             <div>
               <CardTitle className="text-base tracking-tight font-bold">Event Log</CardTitle>
-              <CardDescription className="text-xs text-slate-500 mt-0.5">Raw event stream from HTTP requests and onboard sensors.</CardDescription>
+              <CardDescription className="text-xs text-slate-500 mt-0.5">Raw event stream from AI and hardware telemetry.</CardDescription>
             </div>
           </CardHeader>
           <CardContent className="p-0">
             <div className="overflow-x-auto max-h-[400px]">
               <table className="w-full text-sm text-left">
-                <thead className="bg-slate-50 text-[10px] uppercase font-bold text-slate-500 border-b border-slate-200 sticky top-0">
+                <thead className="bg-slate-50 text-[10px] uppercase font-bold text-slate-500 border-b border-slate-200 sticky top-0 z-10">
                   <tr>
                     <th className="px-6 py-3">Timestamp</th>
                     <th className="px-6 py-3">Type</th>
@@ -143,11 +188,11 @@ export default function MotorStatusPage() {
                         <td className="px-6 py-4 whitespace-nowrap text-slate-500">{log.timestamp}</td>
                         <td className="px-6 py-4 whitespace-nowrap">
                           <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider
-                            ${log.type === 'Security' ? 'bg-rose-100 text-rose-700' : 
-                              log.type === 'Disease' ? 'bg-amber-100 text-amber-700' : 
-                              log.type === 'Insect' ? 'bg-rose-100 text-rose-700' : 
+                            ${log.mode === 'Security' ? 'bg-rose-100 text-rose-700' : 
+                              log.mode === 'Disease' ? 'bg-amber-100 text-amber-700' : 
+                              log.mode === 'Insect' ? 'bg-rose-100 text-rose-700' : 
                               'bg-emerald-100 text-emerald-700'}`}>
-                            {log.type}
+                            {log.mode}
                           </span>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-slate-500">{log.model || 'Unknown'}</td>

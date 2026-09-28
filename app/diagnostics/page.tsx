@@ -42,7 +42,7 @@ export default function DiagnosticsPage() {
   }, [])
 
   // Filter captures that match the active tab type
-  const filteredCaptures = logs.filter(log => log.type === tabMapping[activeTab])
+  const filteredCaptures = logs.filter(log => log.mode === tabMapping[activeTab])
 
   const getHumidityStatus = (hum: number) => {
     if (hum >= 40 && hum <= 70) {
@@ -116,8 +116,8 @@ export default function DiagnosticsPage() {
                     <div className="absolute top-3 right-3 flex flex-col gap-1.5 items-end">
                         <Badge 
                           className={`shadow-sm px-2.5 py-0.5 text-[10px] uppercase font-bold tracking-wider border-0 ${
-                            capture.type === 'Disease' ? 'bg-amber-100 text-amber-800' :
-                            capture.type === 'Insect' ? 'bg-rose-100 text-rose-800' :
+                            capture.mode === 'Disease' ? 'bg-amber-100 text-amber-800' :
+                            capture.mode === 'Insect' ? 'bg-rose-100 text-rose-800' :
                             'bg-emerald-100 text-emerald-800'
                           }`}
                         >
