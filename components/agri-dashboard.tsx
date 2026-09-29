@@ -76,10 +76,11 @@ export function AgriDashboard() {
     humidity: 0, 
     pump: 'OFF' 
   })
-  const [imageTimestamp, setImageTimestamp] = useState(Date.now())
+  const [imageTimestamp, setImageTimestamp] = useState(0)
   const [logs, setLogs] = useState<any[]>([])
 
   useEffect(() => {
+    setImageTimestamp(Date.now())
     const interval = setInterval(async () => {
       try {
         const res = await fetch('http://127.0.0.1:5000/api/status')

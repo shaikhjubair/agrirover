@@ -12,7 +12,6 @@ from ultralytics import YOLO
 app = Flask(__name__)
 CORS(app)
 
-model_general = YOLO("yolov8n.pt")
 model_disease = YOLO("best.pt")
 try:
     model_pest = YOLO("pest.pt")
@@ -28,14 +27,10 @@ except Exception:
 CAMERA_URL = "http://192.168.4.1:81/stream"
 
 STATIC_DIR = "static"
-SECURITY_DIR = os.path.join(STATIC_DIR, "logs", "security")
 HEALTH_DIR = os.path.join(STATIC_DIR, "logs", "health")
-os.makedirs(SECURITY_DIR, exist_ok=True)
 os.makedirs(HEALTH_DIR, exist_ok=True)
 
 CAPTURE_FILE = os.path.join(STATIC_DIR, "latest_capture.jpg")
-
-SECURITY_CLASSES = ["person", "bird", "dog", "cow"]
 
 latest_status = {
     "mode": "Clear",
@@ -112,34 +107,7 @@ def run_inference_on_frame(frame):
         hw_hum = latest_status.get("humidity", 0.0)
         hw_temp = latest_status.get("temperature", 0.0)
 
-    # STEP A: Security
-    res_gen = model_general.predict(frame, conf=0.50, verbose=False)
-    sec_threat = None
-    sec_conf = 0
-    annotated_frame = None
-    
-    if len(res_gen[0].boxes) > 0:
-        for box in res_gen[0].boxes:
-            cls_name = model_general.names[int(box.cls[0].item())]
-            if cls_name in SECURITY_CLASSES:
-                conf = int(box.conf[0].item() * 100)
-                if conf > sec_conf:
-                    sec_threat = cls_name
-                    sec_conf = conf
-                    annotated_frame = res_gen[0].plot()
-                    
-    if sec_threat:
-        filename = f"sec_{timestamp_file}.jpg"
-        filepath = os.path.join(SECURITY_DIR, filename)
-        cv2.imwrite(filepath, annotated_frame)
-        cv2.imwrite(CAPTURE_FILE, annotated_frame)
-        
-        image_url = f"http://127.0.0.1:5000/static/logs/security/{filename}"
-        add_log("Security", sec_threat.capitalize(), timestamp_str, image_url, sec_conf, hw_uptime, hw_hum, hw_temp, "yolov8n.pt")
-        update_global_status("Security", "Intruder Alert", sec_threat.capitalize(), sec_conf, "rose")
-        return
-
-    # STEP B: Multi-Model Inference (Disease, Weed, Pest)
+    # Multi-Model Inference (Disease, Weed, Pest)
     res_dis = model_disease.predict(frame, conf=0.60, verbose=False)
     res_weed = model_weed.predict(frame, conf=0.60, verbose=False)
     res_pest = model_pest.predict(frame, conf=0.60, verbose=False)
