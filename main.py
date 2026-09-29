@@ -1,4 +1,5 @@
 import cv2
+import numpy as np
 import threading
 import time
 import os
@@ -61,8 +62,8 @@ def camera_thread():
     while True:
         ret, frame = cap.read()
         if not ret:
-            print("Failed to grab frame. Reconnecting...")
-            time.sleep(1)
+            print("Camera stream offline. Ensure Macbook is connected to ESP32 WiFi network.")
+            time.sleep(3)
             cap = cv2.VideoCapture(CAMERA_URL)
             continue
             
@@ -169,51 +170,48 @@ def run_inference_on_frame(frame):
         update_global_status("Clear", "Optimal", "All Clear", 100, "emerald")
 
 def ai_processing_thread():
-    last_rover_status = "Moving"
-    
+    last_scan_time = time.time()
     while True:
-        try:
-            response = requests.get("http://192.168.4.1:81", timeout=2)
-            if response.status_code == 200:
-                hw_data = response.json()
-                current_rover_status = hw_data.get("rover_status", "Moving")
+        current_time = time.time()
+        is_manual = manual_scan_event.is_set()
+        
+        if is_manual or (current_time - last_scan_time >= 5.0):
+            if is_manual:
+                manual_scan_event.clear()
+                print("Manual scan triggered, capturing burst...")
+            else:
+                print("Auto scan triggered, capturing burst...")
                 
-                with status_lock:
-                    latest_status["temperature"] = hw_data.get("temperature", 0.0)
-                    latest_status["humidity"] = hw_data.get("humidity", 0.0)
-                    latest_status["pump"] = hw_data.get("pump_status", "OFF")
-                    latest_status["rover"] = current_rover_status
-                    latest_status["direction"] = hw_data.get("direction", "Forwarding")
-                    latest_status["motor_uptime_sec"] = hw_data.get("motor_uptime_sec", latest_status.get("motor_uptime_sec", 0))
-                    
-                if last_rover_status == "Moving" and current_rover_status == "Scanning":
-                    print("Rover transitioned to Scanning, capturing burst...")
-                    frames = []
-                    for _ in range(10):
-                        with frame_lock:
-                            if raw_frame is not None:
-                                frames.append(raw_frame.copy())
-                        time.sleep(0.05)
+            frames = []
+            for _ in range(10):
+                with frame_lock:
+                    if raw_frame is not None:
+                        frames.append(raw_frame.copy())
+                time.sleep(0.05)
+                
+            if frames:
+                best_frame = None
+                max_var = -1
+                for frame in frames:
+                    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+                    variance = cv2.Laplacian(gray, cv2.CV_64F).var()
+                    if variance > max_var:
+                        max_var = variance
+                        best_frame = frame
                         
-                    if frames:
-                        best_frame = None
-                        max_var = -1
-                        for frame in frames:
-                            gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-                            variance = cv2.Laplacian(gray, cv2.CV_64F).var()
-                            if variance > max_var:
-                                max_var = variance
-                                best_frame = frame
-                                
-                        if best_frame is not None:
-                            run_inference_on_frame(best_frame)
-                            
-                last_rover_status = current_rover_status
-                
-        except Exception as e:
-            print(f"Error polling hardware: {e}")
+                if best_frame is not None:
+                    run_inference_on_frame(best_frame)
             
-        time.sleep(0.5)
+            last_scan_time = time.time()
+                    
+        with status_lock:
+            latest_status["motor_uptime_sec"] += 1
+            latest_status["temperature"] = 28.5
+            latest_status["humidity"] = 65.0
+            latest_status["rover"] = "Moving"
+            latest_status["pump"] = "Standby"
+            
+        time.sleep(1.0)
 
 def generate_mjpeg():
     while True:
@@ -245,9 +243,19 @@ def api_logs():
 @app.route('/api/latest_capture')
 def api_latest_capture():
     if not os.path.exists(CAPTURE_FILE):
-        return "Not found", 404
+        img = np.full((480, 640, 3), 50, dtype=np.uint8)
+        text = "Waiting for AI Scan..."
+        font = cv2.FONT_HERSHEY_SIMPLEX
+        text_size = cv2.getTextSize(text, font, 1.0, 2)[0]
+        text_x = (img.shape[1] - text_size[0]) // 2
+        text_y = (img.shape[0] + text_size[1]) // 2
+        cv2.putText(img, text, (text_x, text_y), font, 1.0, (200, 200, 200), 2, cv2.LINE_AA)
+        ret, buffer = cv2.imencode('.jpg', img)
+        response = make_response(buffer.tobytes())
+        response.headers['Content-Type'] = 'image/jpeg'
+    else:
+        response = make_response(send_file(CAPTURE_FILE, mimetype='image/jpeg'))
         
-    response = make_response(send_file(CAPTURE_FILE, mimetype='image/jpeg'))
     response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
     response.headers['Pragma'] = 'no-cache'
     response.headers['Expires'] = '0'
@@ -260,15 +268,13 @@ def api_manual_scan():
 
 @app.route('/api/reverse_motor', methods=['POST'])
 def api_reverse_motor():
-    try:
-        res = requests.get("http://192.168.4.1:81/reverse", timeout=3)
-        if res.status_code == 200:
-            return jsonify({"status": "Success", "message": "Motor direction toggled"})
-        return jsonify({"status": "Error", "message": f"Hardware returned {res.status_code}"}), 502
-    except Exception as e:
-        return jsonify({"status": "Error", "message": str(e)}), 500
+    return jsonify({"status": "Success", "message": "Motor direction toggled (Simulated)"})
 
 if __name__ == '__main__':
+    if os.path.exists(CAPTURE_FILE):
+        os.remove(CAPTURE_FILE)
+        print("Cleared stale capture image.")
+
     print("Starting Raw Camera Thread...")
     cam_thread = threading.Thread(target=camera_thread, daemon=True)
     cam_thread.start()
